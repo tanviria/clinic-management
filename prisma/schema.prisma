@@ -1,0 +1,893 @@
+// ClinicPro - Multi-Tenant Clinic Management SaaS Prisma Schema
+// Compatible with SQLite (for zero-friction out-of-the-box local execution)
+// and PostgreSQL (for production SaaS deployment via DATABASE_URL)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// -------------------------------------------------------------
+// SAAS TENANCY & SUBSCRIPTION
+// -------------------------------------------------------------
+
+model Tenant {
+  id                      String        @id @default(uuid())
+  name                    String
+  slug                    String        @unique
+  logo                    String?
+  email                   String?
+  phone                   String?
+  address                 String?
+  bmdcRegistrationNumber  String?
+  currency                String        @default("BDT")
+  currencySymbol          String        @default("৳")
+  taxRate                 Float         @default(0.0)
+  status                  String        @default("ACTIVE") // ACTIVE, TRIAL, SUSPENDED, EXPIRED
+  subscriptionPlanId      String?
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+
+  branches                Branch[]
+  departments             Department[]
+  users                   User[]
+  doctors                 Doctor[]
+  staff                   Staff[]
+  patients                Patient[]
+  appointments            Appointment[]
+  consultations           Consultation[]
+  prescriptions           Prescription[]
+  medicines               Medicine[]
+  suppliers               Supplier[]
+  purchases               Purchase[]
+  pharmacySales           PharmacySale[]
+  labCategories           LabCategory[]
+  labTests                LabTest[]
+  labOrders               LabOrder[]
+  invoices                Invoice[]
+  payments                Payment[]
+  expenses                Expense[]
+  expenseCategories       ExpenseCategory[]
+  inventoryItems          InventoryItem[]
+  inventoryTransactions   InventoryTransaction[]
+  notifications           Notification[]
+  auditLogs               AuditLog[]
+  subscriptions           Subscription[]
+
+  @@index([status])
+}
+
+model SubscriptionPlan {
+  id            String         @id @default(uuid())
+  name          String         @unique
+  code          String         @unique
+  priceMonthly  Float
+  priceYearly   Float
+  maxBranches   Int            @default(1)
+  maxDoctors    Int            @default(5)
+  maxStaff      Int            @default(10)
+  maxPatients   Int            @default(1000)
+  featuresJson  String         @default("[]")
+  isPopular     Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id              String           @id @default(uuid())
+  tenantId        String
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  planId          String
+  plan            SubscriptionPlan @relation(fields: [planId], references: [id])
+  status          String           @default("ACTIVE") // ACTIVE, TRIAL, PAST_DUE, CANCELLED
+  billingInterval String           @default("MONTHLY") // MONTHLY, YEARLY
+  amount          Float
+  startDate       DateTime         @default(now())
+  endDate         DateTime
+  autoRenew       Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([tenantId])
+}
+
+// -------------------------------------------------------------
+// BRANCHES & DEPARTMENTS
+// -------------------------------------------------------------
+
+model Branch {
+  id          String       @id @default(uuid())
+  tenantId    String
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  code        String
+  phone       String?
+  email       String?
+  address     String?
+  isMain      Boolean      @default(false)
+  status      String       @default("ACTIVE")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  users       User[]
+  doctors     Doctor[]
+  staff       Staff[]
+  appointments Appointment[]
+  expenses    Expense[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+}
+
+model Department {
+  id          String    @id @default(uuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  code        String?
+  description String?
+  status      String    @default("ACTIVE")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  doctors     Doctor[]
+  staff       Staff[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+// -------------------------------------------------------------
+// AUTH, USERS & ROLES
+// -------------------------------------------------------------
+
+model User {
+  id            String      @id @default(uuid())
+  tenantId      String?     // null for SUPER_ADMIN
+  tenant        Tenant?     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branchId      String?
+  branch        Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  name          String
+  email         String      @unique
+  passwordHash  String
+  role          String      @default("RECEPTIONIST") // SUPER_ADMIN, CLINIC_OWNER, CLINIC_ADMIN, BRANCH_MANAGER, DOCTOR, NURSE, RECEPTIONIST, PHARMACIST, LAB_TECHNICIAN, ACCOUNTANT, HR_MANAGER, INVENTORY_MANAGER, PATIENT
+  phone         String?
+  avatar        String?
+  status        String      @default("ACTIVE") // ACTIVE, INACTIVE, SUSPENDED
+  lastLoginAt   DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  doctorProfile Doctor?
+  staffProfile  Staff?
+  notifications Notification[]
+  auditLogs     AuditLog[]
+
+  @@index([tenantId])
+  @@index([role])
+}
+
+// -------------------------------------------------------------
+// DOCTORS & STAFF
+// -------------------------------------------------------------
+
+model Doctor {
+  id               String        @id @default(uuid())
+  tenantId         String
+  tenant           Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branchId         String?
+  branch           Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  departmentId     String?
+  department       Department?   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  userId           String?       @unique
+  user             User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name             String
+  bmdcNumber       String        // BMDC Registration Number
+  specialization   String
+  qualifications   String
+  consultationFee  Float         @default(500.0)
+  followUpFee      Float         @default(300.0)
+  chamberRoom      String?
+  availableDays    String        @default("Saturday,Sunday,Monday,Tuesday,Wednesday,Thursday")
+  shiftStart       String        @default("09:00 AM")
+  shiftEnd         String        @default("05:00 PM")
+  avgConsultMinutes Int          @default(15)
+  status           String        @default("ACTIVE")
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  appointments     Appointment[]
+  consultations    Consultation[]
+  prescriptions    Prescription[]
+  labOrders        LabOrder[]
+
+  @@index([tenantId])
+}
+
+model Staff {
+  id           String        @id @default(uuid())
+  tenantId     String
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branchId     String?
+  branch       Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  departmentId String?
+  department   Department?   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  userId       String?       @unique
+  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  employeeId   String
+  name         String
+  designation  String
+  phone        String
+  email        String
+  joiningDate  DateTime      @default(now())
+  salary       Float         @default(0.0)
+  status       String        @default("ACTIVE")
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  attendances  Attendance[]
+  payrolls     Payroll[]
+
+  @@unique([tenantId, employeeId])
+  @@index([tenantId])
+}
+
+model Attendance {
+  id        String   @id @default(uuid())
+  tenantId  String
+  staffId   String
+  staff     Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  date      DateTime @default(now())
+  checkIn   String?
+  checkOut  String?
+  status    String   @default("PRESENT") // PRESENT, LATE, ABSENT, ON_LEAVE
+  notes     String?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, date])
+}
+
+model Payroll {
+  id            String    @id @default(uuid())
+  tenantId      String
+  staffId       String
+  staff         Staff     @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  month         String    // e.g. "September"
+  year          Int       // e.g. 2026
+  basicSalary   Float
+  allowances    Float     @default(0.0)
+  deductions    Float     @default(0.0)
+  netSalary     Float
+  status        String    @default("PENDING") // PENDING, PAID
+  paymentMethod String?   // CASH, BANK, BKASH
+  paymentDate   DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([tenantId, month, year])
+}
+
+// -------------------------------------------------------------
+// PATIENT MANAGEMENT
+// -------------------------------------------------------------
+
+model Patient {
+  id                     String         @id @default(uuid())
+  tenantId               String
+  tenant                 Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patientId              String         // E.g. CLN-2026-000001
+  name                   String
+  gender                 String         // Male, Female, Other
+  dateOfBirth            DateTime?
+  age                    Int?
+  bloodGroup             String?        // A+, A-, B+, B-, AB+, AB-, O+, O-
+  phone                  String
+  email                  String?
+  address                String?
+  nidPassport            String?
+  emergencyContactName   String?
+  emergencyContactPhone  String?
+  emergencyContactRelation String?
+  occupation             String?
+  maritalStatus          String?
+  allergies              String?        // Comma-separated or text
+  chronicConditions      String?
+  previousMedicalHistory String?
+  currentMedications     String?
+  emergencyNotes         String?
+  photoUrl               String?
+  status                 String         @default("ACTIVE")
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  appointments           Appointment[]
+  consultations          Consultation[]
+  vitals                 Vitals[]
+  prescriptions          Prescription[]
+  labOrders              LabOrder[]
+  invoices               Invoice[]
+  pharmacySales          PharmacySale[]
+
+  @@unique([tenantId, patientId])
+  @@index([tenantId])
+  @@index([phone])
+}
+
+// -------------------------------------------------------------
+// APPOINTMENTS & QUEUE MANAGEMENT
+// -------------------------------------------------------------
+
+model Appointment {
+  id                String        @id @default(uuid())
+  tenantId          String
+  tenant            Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branchId          String?
+  branch            Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  patientId         String
+  patient           Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId          String
+  doctor            Doctor        @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  appointmentNumber String        // E.g. APT-2026-0001
+  appointmentDate   DateTime
+  timeSlot          String        // E.g. "10:30 AM"
+  tokenNumber       String        // E.g. "A001"
+  type              String        @default("CONSULTATION") // CONSULTATION, FOLLOW_UP, WALK_IN, ONLINE
+  status            String        @default("SCHEDULED") // SCHEDULED, CONFIRMED, CHECKED_IN, WAITING, IN_CONSULTATION, COMPLETED, CANCELLED, NO_SHOW
+  reason            String?
+  notes             String?
+  consultationFee   Float         @default(0.0)
+  isPaid            Boolean       @default(false)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  consultation      Consultation?
+  invoices          Invoice[]
+
+  @@index([tenantId, appointmentDate])
+  @@index([doctorId, appointmentDate])
+  @@index([status])
+}
+
+// -------------------------------------------------------------
+// CLINICAL CONSULTATION & VITALS
+// -------------------------------------------------------------
+
+model Consultation {
+  id                      String        @id @default(uuid())
+  tenantId                String
+  tenant                  Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointmentId           String?       @unique
+  appointment             Appointment?  @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  patientId               String
+  patient                 Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId                String
+  doctor                  Doctor        @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  consultationDate        DateTime      @default(now())
+  chiefComplaint          String        // Primary symptom/reason for visit
+  historyOfPresentIllness String?
+  physicalExamination     String?
+  diagnosis               String        // Working or definitive diagnosis
+  doctorNotes             String?
+  treatmentPlan           String?
+  followUpDate            DateTime?
+  status                  String        @default("COMPLETED")
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+
+  vitals                  Vitals?
+  prescription            Prescription?
+  labOrders               LabOrder[]
+
+  @@index([tenantId])
+  @@index([patientId])
+}
+
+model Vitals {
+  id                   String        @id @default(uuid())
+  tenantId             String
+  consultationId       String?       @unique
+  consultation         Consultation? @relation(fields: [consultationId], references: [id], onDelete: Cascade)
+  patientId            String
+  patient              Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  bpSystolic           Int?          // mmHg (e.g. 120)
+  bpDiastolic          Int?          // mmHg (e.g. 80)
+  pulseRate            Int?          // bpm (e.g. 74)
+  temperature          Float?        // Fahrenheit (e.g. 98.6)
+  respiratoryRate      Int?          // breaths/min (e.g. 18)
+  spO2                 Int?          // % (e.g. 98)
+  weightKg             Float?        // kg (e.g. 68.5)
+  heightCm             Float?        // cm (e.g. 172)
+  bmi                  Float?        // auto-calculated
+  recordedAt           DateTime      @default(now())
+
+  @@index([patientId])
+}
+
+// -------------------------------------------------------------
+// DIGITAL PRESCRIPTIONS
+// -------------------------------------------------------------
+
+model Prescription {
+  id                 String             @id @default(uuid())
+  tenantId           String
+  tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  consultationId     String?            @unique
+  consultation       Consultation?      @relation(fields: [consultationId], references: [id], onDelete: SetNull)
+  patientId          String
+  patient            Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId           String
+  doctor             Doctor             @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  prescriptionNumber String             // E.g. RX-2026-0001
+  date               DateTime           @default(now())
+  diagnosis          String?
+  advice             String?
+  dietaryAdvice      String?
+  followUpDays       Int?
+  followUpDate       DateTime?
+  status             String             @default("ACTIVE")
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  items              PrescriptionItem[]
+  pharmacySales      PharmacySale[]
+
+  @@unique([tenantId, prescriptionNumber])
+  @@index([tenantId])
+  @@index([patientId])
+}
+
+model PrescriptionItem {
+  id             String       @id @default(uuid())
+  prescriptionId String
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  medicineName   String       // Brand Name (e.g. Napa Extra)
+  genericName    String?      // Generic Name (e.g. Paracetamol + Caffeine)
+  strength       String?      // e.g. 500mg+65mg
+  dosage         String       // e.g. 1+0+1, 1+1+1
+  route          String       @default("Oral") // Oral, Topical, IV, IM, Inhalation, Eye Drop
+  duration       String       // e.g. 5 days, 1 month
+  timing         String       @default("After Meal") // Before Meal, After Meal, With Meal, Empty Stomach
+  instructions   String?      // e.g. "Take with warm water"
+}
+
+// -------------------------------------------------------------
+// PHARMACY & INVENTORY
+// -------------------------------------------------------------
+
+model Supplier {
+  id            String     @id @default(uuid())
+  tenantId      String
+  tenant        Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name          String
+  contactPerson String?
+  phone         String
+  email         String?
+  address       String?
+  status        String     @default("ACTIVE")
+  createdAt     DateTime   @default(now())
+
+  purchases     Purchase[]
+
+  @@index([tenantId])
+}
+
+model Medicine {
+  id             String          @id @default(uuid())
+  tenantId       String
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  brandName      String          // e.g. Napa, Seclo, Sergel
+  genericName    String          // e.g. Paracetamol, Omeprazole
+  manufacturer   String          // e.g. Beximco, Square, Incepta
+  category       String          // e.g. Tablet, Capsule, Syrup, Injection
+  strength       String          // e.g. 500mg, 20mg
+  unitPrice      Float           // Default selling price
+  purchasePrice  Float           // Default cost price
+  currentStock   Int             @default(0)
+  reorderLevel   Int             @default(50)
+  description    String?
+  status         String          @default("ACTIVE")
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  batches        MedicineBatch[]
+  purchaseItems  PurchaseItem[]
+  saleItems      PharmacySaleItem[]
+
+  @@index([tenantId])
+  @@index([brandName])
+  @@index([genericName])
+}
+
+model MedicineBatch {
+  id            String             @id @default(uuid())
+  tenantId      String
+  medicineId    String
+  medicine      Medicine           @relation(fields: [medicineId], references: [id], onDelete: Cascade)
+  batchNumber   String
+  expiryDate    DateTime
+  purchasePrice Float
+  sellingPrice  Float
+  quantity      Int
+  remainingQty  Int
+  createdAt     DateTime           @default(now())
+
+  saleItems     PharmacySaleItem[]
+
+  @@index([medicineId])
+  @@index([expiryDate])
+}
+
+model Purchase {
+  id             String         @id @default(uuid())
+  tenantId       String
+  tenant         Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  supplierId     String
+  supplier       Supplier       @relation(fields: [supplierId], references: [id])
+  purchaseNumber String         // E.g. PO-2026-0001
+  purchaseDate   DateTime       @default(now())
+  totalAmount    Float
+  paidAmount     Float          @default(0.0)
+  dueAmount      Float          @default(0.0)
+  status         String         @default("RECEIVED") // PENDING, RECEIVED, CANCELLED
+  notes          String?
+  createdAt      DateTime       @default(now())
+
+  items          PurchaseItem[]
+
+  @@unique([tenantId, purchaseNumber])
+  @@index([tenantId])
+}
+
+model PurchaseItem {
+  id           String    @id @default(uuid())
+  purchaseId   String
+  purchase     Purchase  @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  medicineId   String
+  medicine     Medicine  @relation(fields: [medicineId], references: [id])
+  batchNumber  String
+  expiryDate   DateTime
+  quantity     Int
+  unitPrice    Float
+  totalPrice   Float
+}
+
+model PharmacySale {
+  id             String             @id @default(uuid())
+  tenantId       String
+  tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patientId      String?
+  patient        Patient?           @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  prescriptionId String?
+  prescription   Prescription?      @relation(fields: [prescriptionId], references: [id], onDelete: SetNull)
+  saleNumber     String             // E.g. PS-2026-0001
+  customerName   String?
+  customerPhone  String?
+  subTotal       Float
+  discountAmount Float              @default(0.0)
+  taxAmount      Float              @default(0.0)
+  totalAmount    Float
+  paidAmount     Float
+  changeAmount   Float              @default(0.0)
+  paymentMethod  String             @default("CASH") // CASH, CARD, BKASH, NAGAD, ROCKET
+  saleDate       DateTime           @default(now())
+  status         String             @default("COMPLETED")
+  createdAt      DateTime           @default(now())
+
+  items          PharmacySaleItem[]
+  invoices       Invoice[]
+
+  @@unique([tenantId, saleNumber])
+  @@index([tenantId])
+}
+
+model PharmacySaleItem {
+  id              String         @id @default(uuid())
+  pharmacySaleId  String
+  pharmacySale    PharmacySale   @relation(fields: [pharmacySaleId], references: [id], onDelete: Cascade)
+  medicineId      String
+  medicine        Medicine       @relation(fields: [medicineId], references: [id])
+  medicineBatchId String?
+  batch           MedicineBatch? @relation(fields: [medicineBatchId], references: [id], onDelete: SetNull)
+  medicineName    String
+  batchNumber     String?
+  quantity        Int
+  unitPrice       Float
+  totalPrice      Float
+}
+
+// -------------------------------------------------------------
+// LABORATORY & DIAGNOSTICS (LIS)
+// -------------------------------------------------------------
+
+model LabCategory {
+  id          String    @id @default(uuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String    // e.g. Hematology, Biochemistry, Microbiology, Radiology
+  description String?
+  createdAt   DateTime  @default(now())
+
+  tests       LabTest[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model LabTest {
+  id            String        @id @default(uuid())
+  tenantId      String
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  categoryId    String
+  category      LabCategory   @relation(fields: [categoryId], references: [id])
+  code          String        // e.g. CBC, RBS, LIPID, SGPT, CREAT
+  name          String        // e.g. Complete Blood Count
+  sampleType    String        // e.g. Blood, Urine, Stool, Swab
+  price         Float
+  normalRange   String?       // Reference range text
+  unit          String?       // e.g. mg/dL, g/dL, U/L
+  criticalLow   Float?
+  criticalHigh  Float?
+  tatHours      Int           @default(24) // Turnaround time in hours
+  status        String        @default("ACTIVE")
+  createdAt     DateTime      @default(now())
+
+  orderItems    LabOrderItem[]
+  results       LabResult[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+}
+
+model LabOrder {
+  id             String         @id @default(uuid())
+  tenantId       String
+  tenant         Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patientId      String
+  patient        Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId       String?
+  doctor         Doctor?        @relation(fields: [doctorId], references: [id], onDelete: SetNull)
+  consultationId String?
+  consultation   Consultation?  @relation(fields: [consultationId], references: [id], onDelete: SetNull)
+  orderNumber    String         // E.g. LAB-2026-0001
+  orderDate      DateTime       @default(now())
+  priority       String         @default("NORMAL") // NORMAL, URGENT, STAT
+  status         String         @default("PENDING") // PENDING, SAMPLE_COLLECTED, PROCESSING, COMPLETED, CANCELLED
+  totalAmount    Float
+  paidAmount     Float          @default(0.0)
+  clinicalNotes  String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  items          LabOrderItem[]
+  results        LabResult[]
+  invoices       Invoice[]
+
+  @@unique([tenantId, orderNumber])
+  @@index([tenantId])
+  @@index([patientId])
+}
+
+model LabOrderItem {
+  id         String   @id @default(uuid())
+  labOrderId String
+  labOrder   LabOrder @relation(fields: [labOrderId], references: [id], onDelete: Cascade)
+  labTestId  String
+  labTest    LabTest  @relation(fields: [labTestId], references: [id])
+  price      Float
+  status     String   @default("PENDING") // PENDING, SAMPLE_COLLECTED, COMPLETED
+}
+
+model LabResult {
+  id              String    @id @default(uuid())
+  tenantId        String
+  labOrderId      String
+  labOrder        LabOrder  @relation(fields: [labOrderId], references: [id], onDelete: Cascade)
+  labTestId       String
+  labTest         LabTest   @relation(fields: [labTestId], references: [id])
+  parameterName   String
+  resultValue     String
+  unit            String?
+  referenceRange  String?
+  isCritical      Boolean   @default(false)
+  status          String    @default("COMPLETED") // COMPLETED, VERIFIED
+  technicianNotes String?
+  verifiedBy      String?   // Name or ID of verified pathologist
+  verifiedAt      DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([labOrderId])
+}
+
+// -------------------------------------------------------------
+// UNIFIED BILLING, PAYMENTS & EXPENSES
+// -------------------------------------------------------------
+
+model Invoice {
+  id              String        @id @default(uuid())
+  tenantId        String
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  patientId       String
+  patient         Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointmentId   String?
+  appointment     Appointment?  @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  labOrderId      String?
+  labOrder        LabOrder?     @relation(fields: [labOrderId], references: [id], onDelete: SetNull)
+  pharmacySaleId  String?
+  pharmacySale    PharmacySale? @relation(fields: [pharmacySaleId], references: [id], onDelete: SetNull)
+  invoiceNumber   String        // E.g. INV-2026-0001
+  invoiceDate     DateTime      @default(now())
+  dueDate         DateTime?
+  subTotal        Float
+  discountPercent Float         @default(0.0)
+  discountAmount  Float         @default(0.0)
+  taxPercent      Float         @default(0.0)
+  taxAmount       Float         @default(0.0)
+  totalAmount     Float
+  paidAmount      Float         @default(0.0)
+  dueAmount       Float         @default(0.0)
+  status          String        @default("UNPAID") // UNPAID, PARTIALLY_PAID, PAID, CANCELLED, REFUNDED
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  items           InvoiceItem[]
+  payments        Payment[]
+
+  @@unique([tenantId, invoiceNumber])
+  @@index([tenantId])
+  @@index([patientId])
+  @@index([status])
+}
+
+model InvoiceItem {
+  id          String   @id @default(uuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  itemType    String   // CONSULTATION, LAB_TEST, PHARMACY, PROCEDURE, ROOM, OTHER
+  description String
+  quantity    Int      @default(1)
+  unitPrice   Float
+  totalPrice  Float
+}
+
+model Payment {
+  id            String    @id @default(uuid())
+  tenantId      String
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoiceId     String
+  invoice       Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  paymentNumber String    // E.g. PAY-2026-0001
+  amount        Float
+  paymentMethod String    // CASH, CARD, BKASH, NAGAD, ROCKET, BANK_TRANSFER
+  transactionId String?
+  receivedBy    String?
+  notes         String?
+  paymentDate   DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+
+  @@unique([tenantId, paymentNumber])
+  @@index([tenantId])
+  @@index([invoiceId])
+}
+
+model ExpenseCategory {
+  id          String    @id @default(uuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  createdAt   DateTime  @default(now())
+
+  expenses    Expense[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model Expense {
+  id          String          @id @default(uuid())
+  tenantId    String
+  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branchId    String?
+  branch      Branch?         @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  categoryId  String
+  category    ExpenseCategory @relation(fields: [categoryId], references: [id])
+  title       String
+  amount      Float
+  paymentMethod String        @default("CASH") // CASH, CARD, BANK, BKASH
+  vendor      String?
+  expenseDate DateTime        @default(now())
+  receiptUrl  String?
+  notes       String?
+  createdAt   DateTime        @default(now())
+
+  @@index([tenantId])
+}
+
+// -------------------------------------------------------------
+// GENERAL INVENTORY
+// -------------------------------------------------------------
+
+model InventoryItem {
+  id           String                 @id @default(uuid())
+  tenantId     String
+  tenant       Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name         String
+  category     String                 // MEDICAL_SUPPLY, OFFICE_SUPPLY, LAB_SUPPLY, EQUIPMENT
+  sku          String
+  currentStock Int                    @default(0)
+  minStock     Int                    @default(10)
+  unit         String                 // Box, Piece, Pack, Bottle
+  unitPrice    Float                  @default(0.0)
+  location     String?
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+
+  transactions InventoryTransaction[]
+
+  @@unique([tenantId, sku])
+  @@index([tenantId])
+}
+
+model InventoryTransaction {
+  id              String        @id @default(uuid())
+  tenantId        String
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  inventoryItemId String
+  item            InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  type            String        // STOCK_IN, STOCK_OUT, ADJUSTMENT, TRANSFER
+  quantity        Int
+  referenceNumber String?
+  recordedBy      String?
+  notes           String?
+  createdAt       DateTime      @default(now())
+
+  @@index([tenantId])
+}
+
+// -------------------------------------------------------------
+// NOTIFICATIONS & AUDIT LOGS
+// -------------------------------------------------------------
+
+model Notification {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String   @default("INFO") // INFO, APPOINTMENT, LAB, PRESCRIPTION, BILLING, SYSTEM
+  link      String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([userId])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  tenantId  String?
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userEmail String?
+  userName  String?
+  action    String   // VIEW, CREATE, UPDATE, DELETE, LOGIN, EXPORT
+  module    String   // PATIENTS, APPOINTMENTS, PRESCRIPTIONS, LAB, PHARMACY, BILLING, USERS, SETTINGS
+  recordId  String?
+  details   String?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([module])
+  @@index([createdAt])
+}

@@ -3,42 +3,43 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
+import { getRoleBadgeInfo } from '@/lib/rbac';
 import {
   Building2,
   Tv,
-  Bell,
-  Search,
   ChevronDown,
-  User,
   LogOut,
   Stethoscope,
-  ShieldAlert,
   Activity,
-  UserCheck,
   UserPlus,
+  Settings,
+  User as UserIcon,
 } from 'lucide-react';
 
 export default function Navbar() {
-  const { user, logout, switchRole } = useAuth();
-  const [showRoleMenu, setShowRoleMenu] = useState(false);
+  const { user, logout } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
 
-  const demoRoles = [
-    { id: 'CLINIC_ADMIN', label: 'Clinic Admin', desc: 'Engr. Shahinur Alam' },
-    { id: 'DOCTOR', label: 'Doctor (OPD)', desc: 'Dr. M. A. Rahman' },
-    { id: 'RECEPTIONIST', label: 'Reception & Queue', desc: 'Nusrat Jahan' },
-    { id: 'PHARMACIST', label: 'Pharmacist', desc: 'Kamrul Hassan' },
-    { id: 'LAB_TECHNICIAN', label: 'Lab Tech', desc: 'Sultana Razia' },
-    { id: 'ACCOUNTANT', label: 'Accountant', desc: 'Tareq Mahmud' },
-    { id: 'PATIENT', label: 'Patient Portal', desc: 'Tanvir Ahmed' },
-    { id: 'SUPER_ADMIN', label: 'SaaS Super Admin', desc: 'Platform Owner' },
-  ];
+  const badgeInfo = getRoleBadgeInfo(user?.role);
+
+  const canOnboard = ['CLINIC_ADMIN', 'CLINIC_OWNER', 'RECEPTIONIST', 'NURSE', 'SUPER_ADMIN'].includes(
+    user?.role || ''
+  );
+  const canViewQueue = [
+    'CLINIC_ADMIN',
+    'CLINIC_OWNER',
+    'DOCTOR',
+    'NURSE',
+    'RECEPTIONIST',
+    'SUPER_ADMIN',
+  ].includes(user?.role || '');
+  const isAdmin = ['CLINIC_ADMIN', 'CLINIC_OWNER', 'SUPER_ADMIN'].includes(user?.role || '');
 
   return (
     <header className="sticky top-0 z-40 flex h-16 w-full items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm sm:px-6">
       {/* Left: Brand & Clinic Details */}
       <div className="flex items-center space-x-3">
-        <Link href="/" className="flex items-center space-x-2">
+        <Link href={user?.role === 'PATIENT' ? '/portal' : '/'} className="flex items-center space-x-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-600 text-white shadow-sm">
             <Activity className="h-5 w-5" />
           </div>
@@ -62,70 +63,47 @@ export default function Navbar() {
 
       {/* Right Controls */}
       <div className="flex items-center space-x-3">
-        {/* Quick Patient Onboard Link */}
-        <Link
-          href="/patients/onboarding"
-          className="hidden items-center rounded-md bg-teal-600 px-2.5 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-teal-700 sm:flex transition"
-          title="Onboard New Patient"
-        >
-          <UserPlus className="mr-1 h-3.5 w-3.5" />
-          Onboard Patient
-        </Link>
-
-        {/* TV Queue Display Link */}
-        <Link
-          href="/queue/tv"
-          target="_blank"
-          className="hidden items-center rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 sm:flex"
-          title="Open Waiting Room TV Screen"
-        >
-          <Tv className="mr-1.5 h-3.5 w-3.5 text-teal-600" />
-          TV Queue Display
-        </Link>
-
-        {/* Demo Role Switcher Dropdown */}
-        <div className="relative">
-          <button
-            onClick={() => setShowRoleMenu(!showRoleMenu)}
-            className="flex items-center space-x-1.5 rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-xs font-medium text-teal-800 shadow-sm transition hover:bg-teal-100"
+        {/* Quick Patient Onboard Link (Authorized Roles Only) */}
+        {canOnboard && (
+          <Link
+            href="/patients/onboarding"
+            className="hidden items-center rounded-md bg-teal-600 px-2.5 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-teal-700 sm:flex transition"
+            title="Onboard New Patient"
           >
-            <UserCheck className="h-3.5 w-3.5 text-teal-600" />
-            <span className="capitalize">{user?.role?.replace('_', ' ') || 'Switch Role'}</span>
-            <ChevronDown className="h-3 w-3 text-teal-700" />
-          </button>
+            <UserPlus className="mr-1 h-3.5 w-3.5" />
+            Onboard Patient
+          </Link>
+        )}
 
-          {showRoleMenu && (
-            <div className="absolute right-0 mt-2 w-56 rounded-lg border border-slate-200 bg-white p-1.5 shadow-lg ring-1 ring-black/5 z-50">
-              <div className="px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                1-Click Role Switch
-              </div>
-              {demoRoles.map((r) => (
-                <button
-                  key={r.id}
-                  onClick={() => {
-                    setShowRoleMenu(false);
-                    switchRole(r.id);
-                  }}
-                  className={`flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-xs transition ${
-                    user?.role === r.id ? 'bg-teal-50 font-semibold text-teal-900' : 'text-slate-700 hover:bg-slate-50'
-                  }`}
-                >
-                  <div>
-                    <div>{r.label}</div>
-                    <div className="text-[10px] text-slate-400">{r.desc}</div>
-                  </div>
-                  {user?.role === r.id && <span className="h-1.5 w-1.5 rounded-full bg-teal-600" />}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        {/* TV Queue Display Link (Authorized Roles Only) */}
+        {canViewQueue && (
+          <Link
+            href="/queue/tv"
+            target="_blank"
+            className="hidden items-center rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 sm:flex"
+            title="Open Waiting Room TV Screen"
+          >
+            <Tv className="mr-1.5 h-3.5 w-3.5 text-teal-600" />
+            TV Queue Display
+          </Link>
+        )}
+
+        {/* Authenticated Role Indicator Badge (Locked to User Account) */}
+        {user?.role && (
+          <div
+            className={`flex items-center space-x-1.5 rounded-full border px-3 py-1 text-xs font-semibold shadow-xs ${badgeInfo.badgeClass}`}
+            title={`Signed in with verified role: ${badgeInfo.label}`}
+          >
+            <span className={`h-2 w-2 rounded-full ${badgeInfo.dotColor}`} />
+            <span>{badgeInfo.label}</span>
+          </div>
+        )}
 
         {/* User Profile Menu */}
         <div className="relative">
           <button
             onClick={() => setShowUserMenu(!showUserMenu)}
-            className="flex items-center space-x-2 rounded-lg p-1 hover:bg-slate-100"
+            className="flex items-center space-x-2 rounded-lg p-1 hover:bg-slate-100 transition"
           >
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-xs font-bold text-slate-700">
               {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
@@ -141,15 +119,42 @@ export default function Navbar() {
             <div className="absolute right-0 mt-2 w-48 rounded-lg border border-slate-200 bg-white py-1 shadow-lg ring-1 ring-black/5 z-50">
               <div className="border-b border-slate-100 px-3 py-2 text-xs">
                 <div className="font-semibold text-slate-800">{user?.name}</div>
-                <div className="text-slate-400">{user?.role}</div>
+                <div className="text-slate-400 font-medium">{badgeInfo.label}</div>
               </div>
-              <Link
-                href="/settings"
-                onClick={() => setShowUserMenu(false)}
-                className="block px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
-              >
-                Clinic Settings
-              </Link>
+
+              {user?.role === 'DOCTOR' && (
+                <Link
+                  href="/consultations"
+                  onClick={() => setShowUserMenu(false)}
+                  className="flex items-center px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
+                >
+                  <Stethoscope className="mr-2 h-3.5 w-3.5 text-teal-600" />
+                  Doctor Chamber
+                </Link>
+              )}
+
+              {user?.role === 'PATIENT' && (
+                <Link
+                  href="/portal"
+                  onClick={() => setShowUserMenu(false)}
+                  className="flex items-center px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
+                >
+                  <UserIcon className="mr-2 h-3.5 w-3.5 text-teal-600" />
+                  My Health Portal
+                </Link>
+              )}
+
+              {isAdmin && (
+                <Link
+                  href="/settings"
+                  onClick={() => setShowUserMenu(false)}
+                  className="flex items-center px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
+                >
+                  <Settings className="mr-2 h-3.5 w-3.5 text-slate-500" />
+                  Clinic Settings
+                </Link>
+              )}
+
               <button
                 onClick={() => {
                   setShowUserMenu(false);
@@ -157,7 +162,7 @@ export default function Navbar() {
                 }}
                 className="flex w-full items-center px-3 py-1.5 text-xs text-red-600 hover:bg-red-50"
               >
-                <LogOut className="mr-1.5 h-3.5 w-3.5" />
+                <LogOut className="mr-2 h-3.5 w-3.5" />
                 Sign Out
               </button>
             </div>

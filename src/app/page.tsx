@@ -42,10 +42,12 @@ export default function Dashboard() {
   const [lowStockMedicines, setLowStockMedicines] = useState<any[]>([]);
   const [callingPatient, setCallingPatient] = useState(false);
 
-  // Redirect patients directly to patient portal
+  // Redirect patients and super admin directly to their dedicated portals
   useEffect(() => {
     if (user?.role === 'PATIENT') {
       window.location.href = '/portal';
+    } else if (user?.role === 'SUPER_ADMIN') {
+      window.location.href = '/super-admin';
     }
   }, [user]);
 

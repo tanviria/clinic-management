@@ -37,8 +37,8 @@ export interface User {
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (email: string, pass: string) => Promise<boolean>;
-  signup: (formData: any) => Promise<{ success: boolean; error?: string }>;
+  login: (email: string, pass: string) => Promise<User | null>;
+  signup: (formData: any) => Promise<{ success: boolean; user?: User; error?: string }>;
   logout: () => Promise<void>;
   switchRole: (role: string) => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -47,7 +47,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
-  login: async () => false,
+  login: async () => null,
   signup: async () => ({ success: false, error: 'Not initialized' }),
   logout: async () => {},
   switchRole: async () => {},
@@ -88,11 +88,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (res.ok) {
         const data = await res.json();
         setUser(data.user);
-        return true;
+        return data.user;
       }
-      return false;
+      return null;
     } catch {
-      return false;
+      return null;
     }
   };
 
@@ -106,7 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const data = await res.json();
       if (res.ok && data.success) {
         setUser(data.user);
-        return { success: true };
+        return { success: true, user: data.user };
       }
       return { success: false, error: data.error || 'Failed to register account' };
     } catch (err: any) {
@@ -130,7 +130,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (res.ok) {
         const data = await res.json();
         setUser(data.user);
-        window.location.reload();
+        if (role === 'SUPER_ADMIN') {
+          window.location.href = '/super-admin';
+        } else if (role === 'PATIENT') {
+          window.location.href = '/portal';
+        } else if (role === 'DOCTOR') {
+          window.location.href = '/consultations';
+        } else {
+          window.location.href = '/';
+        }
       }
     } catch (e) {
       console.error(e);

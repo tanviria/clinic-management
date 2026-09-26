@@ -15,11 +15,16 @@ import {
   X,
 } from 'lucide-react';
 
+import Link from 'next/link';
+import { useAuth } from '@/context/AuthContext';
+
 export default function SuperAdminPage() {
+  const { user } = useAuth();
   const [tenants, setTenants] = useState<any[]>([]);
   const [plans, setPlans] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // New Tenant Modal State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -34,6 +39,7 @@ export default function SuperAdminPage() {
 
   const fetchTenantData = async () => {
     setLoading(true);
+    setErrorMsg(null);
     try {
       const res = await fetch('/api/tenants');
       if (res.ok) {
@@ -44,9 +50,13 @@ export default function SuperAdminPage() {
         if (d.plans?.length > 0 && !formData.planId) {
           setFormData((prev) => ({ ...prev, planId: d.plans[0].id }));
         }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setErrorMsg(err.error || `Failed to load tenants (HTTP ${res.status})`);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      setErrorMsg(e.message || 'Network error fetching tenant data');
     } finally {
       setLoading(false);
     }
@@ -91,14 +101,35 @@ export default function SuperAdminPage() {
           </p>
         </div>
 
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center rounded-lg bg-purple-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-purple-700 transition"
-        >
-          <Plus className="mr-1.5 h-4 w-4" />
-          Provision New Clinic Tenant
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/"
+            className="flex items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition"
+          >
+            <Activity className="mr-1.5 h-3.5 w-3.5 text-teal-600" />
+            Clinic Operations View
+          </Link>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center rounded-lg bg-purple-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-purple-700 transition"
+          >
+            <Plus className="mr-1.5 h-4 w-4" />
+            Provision New Clinic Tenant
+          </button>
+        </div>
       </div>
+
+      {errorMsg && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-xs text-red-700 flex items-center justify-between">
+          <span>{errorMsg}</span>
+          <button
+            onClick={fetchTenantData}
+            className="rounded bg-red-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-red-700"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* SaaS Platform Metrics */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

@@ -75,8 +75,20 @@ export default function Navbar() {
           </Link>
         )}
 
+        {/* SaaS Super Admin Quick Link */}
+        {user?.role === 'SUPER_ADMIN' && (
+          <Link
+            href="/super-admin"
+            className="flex items-center rounded-md bg-purple-600 px-2.5 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-purple-700 transition"
+            title="Open SaaS Super Admin"
+          >
+            <Building2 className="mr-1.5 h-3.5 w-3.5" />
+            SaaS Super Admin
+          </Link>
+        )}
+
         {/* TV Queue Display Link (Authorized Roles Only) */}
-        {canViewQueue && (
+        {canViewQueue && user?.role !== 'SUPER_ADMIN' && (
           <Link
             href="/queue/tv"
             target="_blank"
@@ -121,6 +133,17 @@ export default function Navbar() {
                 <div className="font-semibold text-slate-800">{user?.name}</div>
                 <div className="text-slate-400 font-medium">{badgeInfo.label}</div>
               </div>
+
+              {user?.role === 'SUPER_ADMIN' && (
+                <Link
+                  href="/super-admin"
+                  onClick={() => setShowUserMenu(false)}
+                  className="flex items-center px-3 py-1.5 text-xs text-purple-700 hover:bg-purple-50 font-semibold"
+                >
+                  <Building2 className="mr-2 h-3.5 w-3.5 text-purple-600" />
+                  SaaS Super Admin
+                </Link>
+              )}
 
               {user?.role === 'DOCTOR' && (
                 <Link

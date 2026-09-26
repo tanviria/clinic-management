@@ -66,9 +66,17 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const ok = await login(email, password);
-      if (ok) {
-        router.push('/');
+      const loggedUser = await login(email, password);
+      if (loggedUser) {
+        if (loggedUser.role === 'SUPER_ADMIN') {
+          router.push('/super-admin');
+        } else if (loggedUser.role === 'PATIENT') {
+          router.push('/portal');
+        } else if (loggedUser.role === 'DOCTOR') {
+          router.push('/consultations');
+        } else {
+          router.push('/');
+        }
       } else {
         setError('Invalid email or password. Please try again.');
       }
@@ -95,7 +103,9 @@ export default function LoginPage() {
       if (result.success) {
         setSuccessMsg('Account created successfully! Redirecting...');
         setTimeout(() => {
-          if (signupRole === 'PATIENT') {
+          if (signupRole === 'SUPER_ADMIN') {
+            router.push('/super-admin');
+          } else if (signupRole === 'PATIENT') {
             router.push('/portal');
           } else if (signupRole === 'DOCTOR') {
             router.push('/consultations');
@@ -116,7 +126,6 @@ export default function LoginPage() {
   const handleQuickDemo = async (role: string) => {
     setLoading(true);
     await switchRole(role);
-    router.push('/');
   };
 
   const demoAccounts = [

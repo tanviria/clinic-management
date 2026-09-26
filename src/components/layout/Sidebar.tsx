@@ -28,7 +28,13 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { user } = useAuth();
 
+  const isPatient = user?.role === 'PATIENT';
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+
   const navigation = [
+    ...(isSuperAdmin
+      ? [{ name: 'SaaS Super Admin', href: '/super-admin', icon: Building2, badge: 'SaaS' }]
+      : []),
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Patient Onboarding', href: '/patients/onboarding', icon: UserPlus, badge: 'New' },
     { name: 'Patients Directory', href: '/patients', icon: Users },
@@ -44,9 +50,6 @@ export default function Sidebar() {
     { name: 'Reports & Analytics', href: '/reports', icon: BarChart3 },
     { name: 'Audit Logs', href: '/audit-logs', icon: ShieldCheck },
   ];
-
-  const isPatient = user?.role === 'PATIENT';
-  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
   const canViewQueueTv = [
     'CLINIC_ADMIN',
     'CLINIC_OWNER',
